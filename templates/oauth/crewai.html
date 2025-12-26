@@ -10,11 +10,38 @@
 {% endblock %}
 
 {% block content %}
-<div class="crewai-container">
-    <div class="crewai-header">
-        <h1 style="font-size: 24px; margin-bottom: 4px;">crewAI 智能体演示</h1>
-        <p style="color: #8c8c8c; margin: 0;">集成 CSV RAG 工具、Human-in-the-loop 和本地 MCP Server 调用</p>
+<div class="crewai-layout-wrapper">
+    <!-- 侧边栏：历史会话 -->
+    <div class="crewai-sidebar">
+        <div style="padding: 16px 20px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; background: #fff;">
+            <h3 style="margin: 0; font-size: 16px; color: #262626; font-weight: 600;">历史会话</h3>
+            <button id="new-session-sidebar-btn" title="新建会话" style="background: none; border: none; color: #1890ff; cursor: pointer; font-size: 18px; transition: transform 0.2s; display: flex; align-items: center; justify-content: center;">
+                <i class="fas fa-plus-circle"></i>
+            </button>
+        </div>
+        <div id="session-list" class="session-list">
+            <!-- 会话列表项将动态生成 -->
+            <div style="text-align: center; padding: 40px 20px; color: #bfbfbf;">
+                <i class="fas fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 12px;"></i>
+                <p style="font-size: 13px;">加载中...</p>
+            </div>
+        </div>
     </div>
+
+    <!-- 主聊天区域 -->
+    <div class="crewai-container" style="flex: 1; margin: 0;">
+        <div class="crewai-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <h1 style="font-size: 20px; margin-bottom: 4px;" id="current-session-title">crewAI 智能体演示</h1>
+                <p style="color: #8c8c8c; margin: 0; font-size: 13px;">集成 CSV RAG 工具、Human-in-the-loop 和本地 MCP Server 调用</p>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button id="new-session-btn" class="btn" style="background: #fff; color: #1890ff; border: 1px solid #1890ff; padding: 6px 16px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: 500; transition: all 0.3s;">
+                    <i class="fas fa-plus"></i>
+                    <span>新会话</span>
+                </button>
+            </div>
+        </div>
 
     <!-- 聊天历史区域 -->
     <div class="chat-history-wrapper" id="chat-scroll-area">
@@ -25,8 +52,13 @@
         </div>
 
         <div id="chat-container" style="display: flex; flex-direction: column; gap: 0;">
-            <!-- 用户消息气泡模板 -->
-            <div id="user-message" class="chat-bubble user-bubble" style="display: none;">
+            <!-- 消息容器将在这里动态生成 -->
+        </div>
+
+        <!-- 模板区域 (隐藏) -->
+        <div id="templates" style="display: none;">
+            <!-- 用户消息模板 -->
+            <div class="user-message-template chat-bubble user-bubble" style="display: flex;">
                 <div class="chat-avatar" style="width: 36px; height: 36px; border-radius: 50%; background: #1890ff; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                     {% if user_info.avatar %}
                         <img src="{{ user_info.avatar }}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
@@ -37,41 +69,41 @@
                     {% endif %}
                 </div>
                 <div style="background: #1890ff; color: #fff; padding: 12px 16px; border-radius: 16px 0 16px 16px; box-shadow: 0 2px 8px rgba(24,144,255,0.15); position: relative;">
-                    <div id="user-query-text"></div>
+                    <div class="user-query-text markdown-body"></div>
                 </div>
             </div>
 
-            <!-- 运行状态和中间过程 -->
-            <div id="status-container" style="display: none;">
-                <div id="status-badge" style="display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; margin-bottom: 16px; font-weight: 500;"></div>
+            <!-- 运行状态模板 -->
+            <div class="status-container-template" style="display: block; margin-top: 20px;">
+                <div class="status-badge" style="display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; margin-bottom: 16px; font-weight: 500;"></div>
                 
                 <div style="display: flex; flex-direction: column; gap: 0;">
                     <!-- 思考过程折叠 -->
-                    <div id="thinking-process" style="display: none; align-self: flex-start; width: 100%; margin-bottom: 24px;">
+                    <div class="thinking-process" style="display: none; align-self: flex-start; width: 100%; margin-bottom: 24px;">
                         <details open class="thinking-details">
                             <summary class="thinking-summary">
                                 <i class="fas fa-brain" style="color: #722ed1;"></i>
                                 <span>智能体思考轨迹</span>
-                                <span id="thinking-dots" style="margin-left: auto;"></span>
+                                <span class="thinking-dots" style="margin-left: auto;"></span>
                             </summary>
-                            <div id="log-content" class="thinking-content">
+                            <div class="log-content thinking-content">
                                 <!-- 解析后的日志将插入到这里 -->
                             </div>
                         </details>
                     </div>
 
                     <!-- HITL 交互区域 -->
-                    <div id="hitl-container" class="chat-bubble agent-bubble" style="display: none; width: 100%; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px;">
+                    <div class="hitl-container chat-bubble agent-bubble" style="display: none; width: 100%; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 20px;">
                         <div style="display: flex; gap: 12px; align-items: flex-start;">
                             <div style="width: 36px; height: 36px; border-radius: 50%; background: #faad14; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                                 <i class="fas fa-user-check"></i>
                             </div>
                             <div style="flex: 1;">
                                 <h4 style="margin: 0 0 8px 0; color: #856404; font-size: 15px;">需要您的反馈</h4>
-                                <p id="hitl-prompt" style="margin-bottom: 16px; color: #856404; line-height: 1.5;"></p>
+                                <p class="hitl-prompt" style="margin-bottom: 16px; color: #856404; line-height: 1.5;"></p>
                                 <div style="display: flex; gap: 12px;">
-                                    <input type="text" id="hitl-input" style="flex: 1; padding: 10px 14px; border: 1px solid #d9d9d9; border-radius: 8px; font-size: 14px;" placeholder="请输入您的回答...">
-                                    <button id="hitl-submit" class="btn" style="background: #faad14; color: #fff; border: none; padding: 0 20px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.3s;">
+                                    <input type="text" class="hitl-input" style="flex: 1; padding: 10px 14px; border: 1px solid #d9d9d9; border-radius: 8px; font-size: 14px;" placeholder="请输入您的回答...">
+                                    <button class="hitl-submit btn" style="background: #faad14; color: #fff; border: none; padding: 0 20px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.3s;">
                                         发送
                                     </button>
                                 </div>
@@ -80,20 +112,20 @@
                     </div>
 
                     <!-- 最终结果气泡 -->
-                    <div id="result-container" class="chat-bubble agent-bubble" style="display: none; width: 100%; background: #fff; border: 1px solid #e8e8e8; border-radius: 0 16px 16px 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 20px;">
+                    <div class="result-container chat-bubble agent-bubble" style="display: none; width: 100%; background: #fff; border: 1px solid #e8e8e8; border-radius: 0 16px 16px 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 20px;">
                         <div style="display: flex; gap: 12px; align-items: flex-start;">
                             <div style="width: 36px; height: 36px; border-radius: 50%; background: #52c41a; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 4px rgba(82,196,26,0.2);">
                                 <i class="fas fa-robot"></i>
                             </div>
                             <div style="flex: 1;">
                                 <div style="font-weight: 600; margin-bottom: 8px; font-size: 14px; color: #262626;">智能体最终回答</div>
-                                <div id="result-content" class="markdown-body"></div>
+                                <div class="result-content markdown-body"></div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div id="loading-indicator" style="display: none; text-align: center; padding: 20px; margin-top: 10px;">
+                <div class="loading-indicator" style="display: none; text-align: center; padding: 20px; margin-top: 10px;">
                     <div class="typing-indicator" style="display: inline-flex; gap: 4px; padding: 8px 16px; background: #f0f0f0; border-radius: 20px;">
                         <span style="width: 6px; height: 6px; background: #bfbfbf; border-radius: 50%; animation: typing 1s infinite 0s;"></span>
                         <span style="width: 6px; height: 6px; background: #bfbfbf; border-radius: 50%; animation: typing 1s infinite 0.2s;"></span>
@@ -103,9 +135,9 @@
                 </div>
             </div>
 
-            <div id="error-container" style="display: none; padding: 16px; background: #fff2f0; border: 1px solid #ffccc7; border-radius: 12px; color: #ff4d4f; margin-bottom: 24px;">
+            <div class="error-container-template" style="display: block; padding: 16px; background: #fff2f0; border: 1px solid #ffccc7; border-radius: 12px; color: #ff4d4f; margin-bottom: 24px;">
                 <i class="fas fa-exclamation-circle" style="margin-right: 8px;"></i>
-                <strong>错误：</strong> <span id="error-message"></span>
+                <strong>错误：</strong> <span class="error-message"></span>
             </div>
         </div>
     </div>
@@ -143,6 +175,7 @@
             </div>
         </div>
     </div>
+    </div>
 </div>
 
 <!-- 工具详情 Modal -->
@@ -164,6 +197,10 @@
 <script>
     window.CrewAIConfig = {
         runUrl: "{% url 'crewai_run' %}",
+        newSessionUrl: "{% url 'crewai_new_session' %}",
+        sessionsUrl: "{% url 'crewai_sessions' %}",
+        historyUrl: "{% url 'crewai_history' %}",
+        deleteSessionUrl: "{% url 'crewai_delete_session' 0 %}".replace('0', ''),
         csrfToken: "{{ csrf_token }}",
         userAvatar: "{% if user_info.avatar %}{{ user_info.avatar }}{% elif user_info %}{{ user_info.name|slice:':1'|upper }}{% else %}👤{% endif %}"
     };

@@ -1,6 +1,6 @@
 {
     "assets.csv": {
-        "description": "Contains asset information, including IP addresses, server names, and ownership details.",
+        "description": "Contains asset information, including IP addresses, server names, and ownership details.如果你有值得关注的 IP，请搜索这里获取更多信息。",
         "columns": [
             "asset_id",
             "ip_address",

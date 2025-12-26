@@ -23,12 +23,21 @@ logger = logging.getLogger('crewai_agent')
 # Initialize logging redirection
 setup_logging()
 
-def run_crew(query: str, allow_human_input: bool = True, run_id: str = None, base_url: str = None, api_key: str = None, username: str = None):
+def run_crew(query: str, history: list = None, allow_human_input: bool = True, run_id: str = None, base_url: str = None, api_key: str = None, username: str = None):
     # Set run_id for log capturing
     if run_id:
         _thread_local.run_id = run_id
         if "logs" not in agent_runs[run_id]:
             agent_runs[run_id]["logs"] = []
+
+    # Prepare context from history
+    context_str = ""
+    if history:
+        context_str = "以下是之前的对话历史，请参考这些信息来回答用户的新问题：\n"
+        for msg in history:
+            role_name = "用户" if msg.get('role') == 'user' else "助手"
+            context_str += f"{role_name}: {msg.get('content')}\n"
+        context_str += "\n当前新问题："
 
     # Set up tools for this run
     knowledge_tool = KnowledgeBaseTool()
@@ -81,7 +90,7 @@ def run_crew(query: str, allow_human_input: bool = True, run_id: str = None, bas
     try:
         # Task 1: Information Gathering and Problem Solving
         info_task = Task(
-            description=f'Answer the user query: "{query}". \n'
+            description=f'{context_str}Answer the user query: "{query}". \n'
                         'Steps:\n'
                         '1. Search and analyze logs in Rizhiyi.\n'
                         '2. Search the knowledge base for error codes or assets if needed.\n'

@@ -3,23 +3,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const queryInput = document.getElementById('query');
     const submitBtn = document.getElementById('submit-btn');
     const stopBtn = document.getElementById('stop-btn');
+    const newSessionBtn = document.getElementById('new-session-btn');
     const scrollArea = document.getElementById('chat-scroll-area');
+    const chatContainer = document.getElementById('chat-container');
     const welcomeMessage = document.getElementById('welcome-message');
-    const statusContainer = document.getElementById('status-container');
-    const statusBadge = document.getElementById('status-badge');
-    const hitlContainer = document.getElementById('hitl-container');
-    const hitlPrompt = document.getElementById('hitl-prompt');
-    const hitlInput = document.getElementById('hitl-input');
-    const hitlSubmit = document.getElementById('hitl-submit');
-    const userMessage = document.getElementById('user-message');
-    const userQueryText = document.getElementById('user-query-text');
-    const thinkingProcess = document.getElementById('thinking-process');
-    const resultContainer = document.getElementById('result-container');
-    const resultContent = document.getElementById('result-content');
-    const loadingIndicator = document.getElementById('loading-indicator');
-    const logContent = document.getElementById('log-content');
-    const errorContainer = document.getElementById('error-container');
-    const errorMessage = document.getElementById('error-message');
+    const sessionList = document.getElementById('session-list');
+    const newSessionSidebarBtn = document.getElementById('new-session-sidebar-btn');
+    const currentSessionTitle = document.getElementById('current-session-title');
+    
+    // 模板
+    const userMessageTemplate = document.querySelector('.user-message-template');
+    const statusContainerTemplate = document.querySelector('.status-container-template');
+    const errorContainerTemplate = document.querySelector('.error-container-template');
+
+    // 获取配置
+    const config = window.CrewAIConfig || {};
+    
+    // 会话历史
+    let chatHistory = [];
+    let currentElements = null; // 当前正在运行的对话相关的 DOM 元素
     const mcpContainer = document.getElementById('mcp-servers-container');
     const mcpLoading = document.getElementById('mcp-loading');
     const toolModal = document.getElementById('tool-modal');
@@ -27,9 +29,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const modalBody = document.getElementById('modal-body');
     const closeModal = document.getElementById('close-modal');
     
-    // 获取配置
-    const config = window.CrewAIConfig || {};
-
     // 配置 Markdown 解析器
     marked.setOptions({
         highlight: function(code, lang) {
@@ -45,12 +44,164 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentRunId = null;
     let pollInterval = null;
     let lastLogsJson = '';
+    let currentSessionId = null;
 
     // 自动调整输入框高度
     queryInput.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = (this.scrollHeight) + 'px';
     });
+
+    // 创建新会话的通用函数
+    async function createNewSession() {
+        if (currentRunId && !confirm('当前会话正在运行，确定要开启新会话吗？')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(config.newSessionUrl, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': config.csrfToken
+                }
+            });
+            const data = await response.json();
+            
+            if (data.status === 'ok') {
+                // 清空当前聊天界面
+                chatContainer.innerHTML = '';
+                chatHistory = [];
+                welcomeMessage.style.display = 'block';
+                queryInput.value = '';
+                queryInput.style.height = 'auto';
+                currentSessionId = data.session_id;
+                currentSessionTitle.innerText = '新会话';
+                
+                // 如果正在轮询，停止它
+                stopPolling();
+                currentRunId = null;
+                
+                // 刷新会话列表
+                await loadSessions();
+                
+                console.log('New session created:', data.session_id);
+            } else {
+                alert('创建新会话失败: ' + (data.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('Failed to create new session:', error);
+            alert('创建新会话失败，请重试');
+        }
+    }
+
+    // 加载会话列表
+    async function loadSessions() {
+        try {
+            const response = await fetch(config.sessionsUrl);
+            const data = await response.json();
+            
+            if (sessionList) {
+                sessionList.innerHTML = '';
+                if (data.sessions && data.sessions.length > 0) {
+                    data.sessions.forEach(session => {
+                        const isActive = currentSessionId == session.id;
+                        const item = document.createElement('div');
+                        item.className = `session-item ${isActive ? 'active' : ''}`;
+                        item.dataset.id = session.id;
+                        item.innerHTML = `
+                            <div style="flex: 1; overflow: hidden;">
+                                <div class="session-title" title="${session.title}">${session.title}</div>
+                                <div class="session-date">${session.updated_at}</div>
+                            </div>
+                            <div class="session-delete" title="删除会话" data-id="${session.id}">
+                                <i class="fas fa-trash-alt"></i>
+                            </div>
+                        `;
+                        
+                        item.addEventListener('click', (e) => {
+                            if (e.target.closest('.session-delete')) {
+                                deleteSession(session.id);
+                            } else {
+                                selectSession(session.id);
+                            }
+                        });
+                        
+                        sessionList.appendChild(item);
+                    });
+                } else {
+                    sessionList.innerHTML = `
+                        <div style="text-align: center; padding: 40px 20px; color: #bfbfbf;">
+                            <i class="fas fa-comments" style="font-size: 32px; margin-bottom: 12px; opacity: 0.2;"></i>
+                            <p style="font-size: 13px;">暂无历史会话</p>
+                        </div>
+                    `;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load sessions:', error);
+        }
+    }
+
+    // 选择会话
+    async function selectSession(sessionId) {
+        if (currentSessionId == sessionId) return;
+        if (currentRunId && !confirm('当前任务正在运行，切换会话将停止查看当前运行状态。确定切换吗？')) {
+            return;
+        }
+
+        currentSessionId = sessionId;
+        
+        // 更新 UI 状态
+        document.querySelectorAll('.session-item').forEach(item => {
+            item.classList.toggle('active', item.dataset.id == sessionId);
+        });
+
+        // 停止当前轮询
+        stopPolling();
+        currentRunId = null;
+
+        // 加载选中会话的历史
+        await loadHistory(sessionId);
+    }
+
+    // 删除会话
+    async function deleteSession(sessionId) {
+        if (!confirm('确定要删除这个会话吗？此操作不可撤销。')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${config.deleteSessionUrl}${sessionId}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': config.csrfToken
+                }
+            });
+            const data = await response.json();
+            
+            if (data.status === 'ok') {
+                if (currentSessionId == sessionId) {
+                    // 如果删除的是当前会话，则加载最新的
+                    currentSessionId = null;
+                    await loadHistory();
+                }
+                await loadSessions();
+            } else {
+                alert('删除失败: ' + (data.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('Failed to delete session:', error);
+            alert('删除失败，请重试');
+        }
+    }
+
+    // 新会话按钮点击处理
+    if (newSessionBtn) {
+        newSessionBtn.addEventListener('click', createNewSession);
+    }
+    if (newSessionSidebarBtn) {
+        newSessionSidebarBtn.addEventListener('click', createNewSession);
+    }
 
     // 加载 MCP 服务器信息
     async function loadMCPServers() {
@@ -119,6 +270,74 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 初始化加载
     loadMCPServers();
+    loadSessions();
+    loadHistory();
+
+    async function loadHistory(sessionId = null) {
+        try {
+            let url = config.historyUrl;
+            if (sessionId) {
+                url += `?session_id=${sessionId}`;
+            }
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            // 清空当前聊天容器
+            chatContainer.innerHTML = '';
+            chatHistory = [];
+            welcomeMessage.style.display = 'block';
+
+            if (data.session_id) {
+                currentSessionId = data.session_id;
+                currentSessionTitle.innerText = data.title || 'crewAI 智能体演示';
+                // 确保列表中的状态也是正确的
+                loadSessions();
+            }
+            
+            if (data.history && data.history.length > 0) {
+                welcomeMessage.style.display = 'none';
+                
+                // 按顺序渲染历史消息
+                for (let i = 0; i < data.history.length; i++) {
+                    const msg = data.history[i];
+                    if (msg.role === 'user') {
+                        // 如果下一条是 agent，我们把它们成对渲染
+                        const nextMsg = data.history[i+1];
+                        if (nextMsg && nextMsg.role === 'agent') {
+                            renderHistoryPair(msg.content, nextMsg.content, nextMsg.logs);
+                            i++; // 跳过下一条
+                        } else {
+                            renderHistoryPair(msg.content, null, null);
+                        }
+                    }
+                }
+                scrollToBottom();
+            }
+        } catch (error) {
+            console.error('Failed to load history:', error);
+        }
+    }
+
+    function renderHistoryPair(userQuery, agentResult, logs) {
+        const els = createNewMessagePair(userQuery);
+        chatHistory.push({ role: 'user', content: userQuery });
+        
+        if (agentResult || logs) {
+            els.thinkingProcess.style.display = 'none';
+            els.loadingIndicator.style.display = 'none';
+            
+            if (logs && logs.length > 0) {
+                els.thinkingProcess.style.display = 'block';
+                els.logContent.innerHTML = parseLogs(logs);
+            }
+            
+            if (agentResult) {
+                els.resultContainer.style.display = 'block';
+                els.resultContent.innerHTML = marked.parse(agentResult);
+                chatHistory.push({ role: 'agent', content: agentResult });
+            }
+        }
+    }
 
     // Enter 键提交，Shift+Enter 换行
     queryInput.addEventListener('keydown', function(e) {
@@ -130,103 +349,63 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 滚动到底部函数
     function scrollToBottom() {
-        scrollArea.scrollTop = scrollArea.scrollHeight;
+        scrollArea.scrollTo({
+            top: scrollArea.scrollHeight,
+            behavior: 'smooth'
+        });
     }
 
     // 滚动日志区域到底部
     function scrollLogsToBottom() {
-        if (logContent) {
-            logContent.scrollTop = logContent.scrollHeight;
+        if (currentElements && currentElements.logContent) {
+            currentElements.logContent.scrollTop = currentElements.logContent.scrollHeight;
         }
     }
 
-    form.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        const query = queryInput.value.trim();
-        if (!query) return;
+    function createNewMessagePair(query) {
+        // 创建用户消息
+        const userMsg = userMessageTemplate.cloneNode(true);
+        userMsg.classList.remove('user-message-template');
+        userMsg.style.display = 'flex';
+        userMsg.querySelector('.user-query-text').innerHTML = marked.parse(query);
+        chatContainer.appendChild(userMsg);
 
-        // Reset UI
-        submitBtn.style.display = 'none';
-        stopBtn.style.display = 'flex';
-        stopBtn.disabled = false;
-        welcomeMessage.style.display = 'none';
-        errorContainer.style.display = 'none';
-        resultContainer.style.display = 'none';
-        hitlContainer.style.display = 'none';
-        statusContainer.style.display = 'block';
-        loadingIndicator.style.display = 'block';
-        
-        // Show user message
-        userMessage.style.display = 'flex';
-        userQueryText.innerHTML = marked.parse(query);
-        userQueryText.classList.add('markdown-body');
-        
-        // Reset thinking process
-        thinkingProcess.style.display = 'block';
-        logContent.innerHTML = '<div style="color: #8c8c8c; font-style: italic;">准备开始任务...</div>';
-        lastLogsJson = ''; // 重置日志追踪
-        updateStatus('running');
-        
-        // 清空并重置输入框高度
-        queryInput.value = '';
-        queryInput.style.height = 'auto';
-        
-        scrollToBottom();
+        // 创建状态和结果容器
+        const statusContainer = statusContainerTemplate.cloneNode(true);
+        statusContainer.classList.remove('status-container-template');
+        chatContainer.appendChild(statusContainer);
 
-        try {
-            const response = await fetch(config.runUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': config.csrfToken
-                },
-                body: JSON.stringify({ query })
-            });
+        const els = {
+            statusContainer: statusContainer,
+            statusBadge: statusContainer.querySelector('.status-badge'),
+            thinkingProcess: statusContainer.querySelector('.thinking-process'),
+            thinkingDots: statusContainer.querySelector('.thinking-dots'),
+            logContent: statusContainer.querySelector('.log-content'),
+            hitlContainer: statusContainer.querySelector('.hitl-container'),
+            hitlPrompt: statusContainer.querySelector('.hitl-prompt'),
+            hitlInput: statusContainer.querySelector('.hitl-input'),
+            hitlSubmit: statusContainer.querySelector('.hitl-submit'),
+            resultContainer: statusContainer.querySelector('.result-container'),
+            resultContent: statusContainer.querySelector('.result-content'),
+            loadingIndicator: statusContainer.querySelector('.loading-indicator')
+        };
 
-            const data = await response.json();
-            if (data.error) throw new Error(data.error);
-
-            currentRunId = data.run_id;
-            startPolling();
-        } catch (err) {
-            showError(err.message);
-        }
-    });
-
-    stopBtn.addEventListener('click', async function() {
-        if (!currentRunId) return;
+        // 为新的 HITL 按钮绑定事件
+        els.hitlSubmit.addEventListener('click', () => handleHitlSubmit(els));
         
-        stopBtn.disabled = true;
-        stopBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>正在停止...</span>';
-        
-        try {
-            const response = await fetch(`/oauth/crewai/stop/${currentRunId}/`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': config.csrfToken
-                }
-            });
-            const data = await response.json();
-            if (data.status === 'ok') {
-                updateStatus('stopped');
-                stopPolling();
-                loadingIndicator.style.display = 'none';
-                submitBtn.style.display = 'flex';
-                submitBtn.disabled = false;
-                stopBtn.style.display = 'none';
-                stopBtn.innerHTML = '<i class="fas fa-stop-circle"></i><span>停止</span>';
-            }
-        } catch (err) {
-            console.error('Stop error:', err);
-            showError('停止失败: ' + err.message);
-        }
-    });
+        // HITL 输入框回车支持
+        els.hitlInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') els.hitlSubmit.click();
+        });
 
-    hitlSubmit.addEventListener('click', async function() {
-        const input = hitlInput.value.trim();
+        return els;
+    }
+
+    async function handleHitlSubmit(els) {
+        const input = els.hitlInput.value.trim();
         if (!input) return;
 
-        hitlSubmit.disabled = true;
+        els.hitlSubmit.disabled = true;
         try {
             // Append human input to logs with avatar
             const userAvatar = config.userAvatar;
@@ -252,7 +431,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     ${marked.parse(input)}
                 </div>
             `;
-            logContent.appendChild(humanLog);
+            els.logContent.appendChild(humanLog);
             humanLog.scrollIntoView({ behavior: 'smooth' });
 
             const response = await fetch(`/oauth/crewai/input/${currentRunId}/`, {
@@ -266,14 +445,102 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const data = await response.json();
             if (data.status === 'ok') {
-                hitlContainer.style.display = 'none';
-                hitlInput.value = '';
-                loadingIndicator.style.display = 'block';
+                els.hitlContainer.style.display = 'none';
+                els.hitlInput.value = '';
+                els.loadingIndicator.style.display = 'block';
             }
         } catch (err) {
             showError(err.message);
         } finally {
-            hitlSubmit.disabled = false;
+            els.hitlSubmit.disabled = false;
+        }
+    }
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const query = queryInput.value.trim();
+        if (!query) return;
+
+        // Reset UI for new message
+        submitBtn.style.display = 'none';
+        stopBtn.style.display = 'flex';
+        stopBtn.disabled = false;
+        welcomeMessage.style.display = 'none';
+        
+        // 创建新的消息对
+        currentElements = createNewMessagePair(query);
+        
+        // Reset thinking process
+        currentElements.thinkingProcess.style.display = 'block';
+        currentElements.logContent.innerHTML = '<div style="color: #8c8c8c; font-style: italic;">准备开始任务...</div>';
+        lastLogsJson = ''; // 重置日志追踪
+        updateStatus('running');
+        
+        // 清空并重置输入框高度
+        queryInput.value = '';
+        queryInput.style.height = 'auto';
+        
+        scrollToBottom();
+
+        try {
+            const response = await fetch(config.runUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': config.csrfToken
+                },
+                body: JSON.stringify({ 
+                    query: query,
+                    history: chatHistory,
+                    session_id: currentSessionId
+                })
+            });
+
+            const data = await response.json();
+            if (data.error) throw new Error(data.error);
+
+            // 如果后端返回了新的 session_id (例如自动创建的)，更新它
+            if (data.session_id && currentSessionId != data.session_id) {
+                currentSessionId = data.session_id;
+                loadSessions();
+            }
+
+            // 将用户消息加入历史
+            chatHistory.push({ role: 'user', content: query });
+
+            currentRunId = data.run_id;
+            startPolling();
+        } catch (err) {
+            showError(err.message);
+        }
+    });
+
+    stopBtn.addEventListener('click', async function() {
+        if (!currentRunId || !currentElements) return;
+        
+        stopBtn.disabled = true;
+        stopBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>正在停止...</span>';
+        
+        try {
+            const response = await fetch(`/oauth/crewai/stop/${currentRunId}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': config.csrfToken
+                }
+            });
+            const data = await response.json();
+            if (data.status === 'ok') {
+                updateStatus('stopped');
+                stopPolling();
+                currentElements.loadingIndicator.style.display = 'none';
+                submitBtn.style.display = 'flex';
+                submitBtn.disabled = false;
+                stopBtn.style.display = 'none';
+                stopBtn.innerHTML = '<i class="fas fa-stop-circle"></i><span>停止</span>';
+            }
+        } catch (err) {
+            console.error('Stop error:', err);
+            showError('停止失败: ' + err.message);
         }
     });
 
@@ -282,8 +549,15 @@ document.addEventListener('DOMContentLoaded', function() {
         pollInterval = setInterval(checkStatus, 2000);
     }
 
+    function stopPolling() {
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+    }
+
     async function checkStatus() {
-        if (!currentRunId) return;
+        if (!currentRunId || !currentElements) return;
 
         try {
             const response = await fetch(`/oauth/crewai/status/${currentRunId}/`);
@@ -297,7 +571,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 只有当日志内容真正发生变化时才更新 DOM，避免页面抖动
                 if (logsJson !== lastLogsJson) {
                     const isScrolledToBottom = scrollArea.scrollHeight - scrollArea.clientHeight <= scrollArea.scrollTop + 50;
-                    logContent.innerHTML = parseLogs(data.logs);
+                    currentElements.logContent.innerHTML = parseLogs(data.logs);
                     lastLogsJson = logsJson;
                     
                     // 自动滚动日志展示区域到最新内容
@@ -310,26 +584,33 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (data.status === 'waiting') {
-                loadingIndicator.style.display = 'none';
-                hitlContainer.style.display = 'block';
-                hitlPrompt.innerText = data.prompt || '智能体需要您的反馈以继续。';
+                currentElements.loadingIndicator.style.display = 'none';
+                currentElements.hitlContainer.style.display = 'block';
+                currentElements.hitlPrompt.innerText = data.prompt || '智能体需要您的反馈以继续。';
                 scrollToBottom();
             } else if (data.status === 'completed') {
                 stopPolling();
-                loadingIndicator.style.display = 'none';
-                resultContainer.style.display = 'block';
-                resultContent.innerHTML = marked.parse(data.result || '');
+                currentElements.loadingIndicator.style.display = 'none';
+                currentElements.resultContainer.style.display = 'block';
+                currentElements.resultContent.innerHTML = marked.parse(data.result || '');
+                
+                // 将 Agent 的回复加入历史
+                chatHistory.push({ role: 'agent', content: data.result || '' });
+                
+                // 运行完成后刷新会话列表，因为标题可能已更新
+                loadSessions();
+                
                 submitBtn.style.display = 'flex';
                 submitBtn.disabled = false;
                 stopBtn.style.display = 'none';
                 scrollToBottom();
             } else if (data.status === 'error' || data.status === 'stopped') {
                 stopPolling();
-                loadingIndicator.style.display = 'none';
+                currentElements.loadingIndicator.style.display = 'none';
                 if (data.status === 'error') {
                     showError(data.result);
                 } else {
-                    logContent.innerHTML += '<div style="color: #ff4d4f; font-style: italic; text-align: center; margin-top: 10px;">任务已手动停止。</div>';
+                    currentElements.logContent.innerHTML += '<div style="color: #ff4d4f; font-style: italic; text-align: center; margin-top: 10px;">任务已手动停止。</div>';
                     scrollLogsToBottom();
                 }
                 submitBtn.style.display = 'flex';
@@ -436,38 +717,33 @@ document.addEventListener('DOMContentLoaded', function() {
         return html || '<div style="color: #8c8c8c; font-style: italic; text-align: center; padding: 20px;">智能体正在思考中...</div>';
     }
 
-    function stopPolling() {
-        clearInterval(pollInterval);
-        pollInterval = null;
-    }
-
     function updateStatus(status) {
-        statusBadge.innerText = status.toUpperCase();
+        if (!currentElements) return;
+        currentElements.statusBadge.innerText = status.toUpperCase();
         if (status === 'running') {
-            statusBadge.style.background = '#e6f7ff';
-            statusBadge.style.color = '#1890ff';
+            currentElements.statusBadge.style.background = '#e6f7ff';
+            currentElements.statusBadge.style.color = '#1890ff';
+            currentElements.loadingIndicator.style.display = 'block';
         } else if (status === 'waiting') {
-            statusBadge.style.background = '#fff7e6';
-            statusBadge.style.color = '#fa8c16';
+            currentElements.statusBadge.style.background = '#fffbe6';
+            currentElements.statusBadge.style.color = '#faad14';
+            currentElements.loadingIndicator.style.display = 'none';
         } else if (status === 'completed') {
-            statusBadge.style.background = '#f6ffed';
-            statusBadge.style.color = '#52c41a';
-        } else if (status === 'stopped') {
-            statusBadge.style.background = '#f5f5f5';
-            statusBadge.style.color = '#8c8c8c';
-        } else {
-            statusBadge.style.background = '#fff2f0';
-            statusBadge.style.color = '#ff4d4f';
+            currentElements.statusBadge.style.background = '#f6ffed';
+            currentElements.statusBadge.style.color = '#52c41a';
+            currentElements.loadingIndicator.style.display = 'none';
+        } else if (status === 'error' || status === 'stopped') {
+            currentElements.statusBadge.style.background = '#fff2f0';
+            currentElements.statusBadge.style.color = '#ff4d4f';
+            currentElements.loadingIndicator.style.display = 'none';
         }
     }
 
     function showError(msg) {
-        errorContainer.style.display = 'block';
-        errorMessage.innerText = msg;
-        loadingIndicator.style.display = 'none';
-        submitBtn.style.display = 'flex';
-        submitBtn.disabled = false;
-        stopBtn.style.display = 'none';
+        const errorContainer = errorContainerTemplate.cloneNode(true);
+        errorContainer.classList.remove('error-container-template');
+        errorContainer.querySelector('.error-message').innerText = msg;
+        chatContainer.appendChild(errorContainer);
         scrollToBottom();
     }
 });

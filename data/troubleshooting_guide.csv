@@ -1,0 +1,7 @@
+issue_id,issue_key,summary,solution
+4,CPU_HIGH,High CPU Usage,Check for long-running queries or infinite loops in the application.
+5,MEM_LEAK,Memory Leak,Monitor heap usage and check for unclosed resources or large object allocations.
+12,DISK_FULL,Disk Space Low,"Clean up old log files in /var/log or expand disk capacity."
+13,NET_TIMEOUT,Network Timeout,Verify upstream service availability and check firewall rules.
+14,DB_SLOW_QUERY,Slow Database Query,Identify slow queries using EXPLAIN and add necessary indexes.
+15,SSL_EXPIRED,SSL Certificate Expired,Renew the SSL certificate and restart the web server.

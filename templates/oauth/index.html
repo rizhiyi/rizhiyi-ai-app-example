@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}{{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+    <style>
+        .demo-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #333;
+            margin: 0 0 10px 0;
+        }
+        .header p {
+            color: #666;
+            margin: 0;
+        }
+        .config-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .config-info h3 {
+            margin: 0 0 15px 0;
+            color: #007bff;
+        }
+        .config-item {
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .config-item label {
+            font-weight: bold;
+            color: #333;
+            display: inline-block;
+            width: 120px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 10px 5px;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .code {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+        }
+    </style>
+    
+    <div class="demo-container">
+        <!-- Debug Info -->
+        <div style="background: #f5f5f5; padding: 10px; margin-bottom: 20px; border-radius: 4px; font-size: 12px; display: none;" id="debug-panel">
+            <strong>Debug Info:</strong><br>
+            Session ID: {{ debug_session_id }}<br>
+            User Info: {{ debug_user_info|yesno:"Found,Not Found" }} ({{ debug_user_info.name }})
+        </div>
+        <script>
+            // Press 'D' to show debug panel
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'd' || e.key === 'D') {
+                    const panel = document.getElementById('debug-panel');
+                    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                }
+            });
+        </script>
+        <div class="header">
+            <h1>{{ config.APP_NAME }}</h1>
+            <p>演示如何作为第三方应用集成日志易OAuth2.0</p>
+        </div>
+
+        <div class="warning">
+            <strong>⚠️ 配置提醒：</strong><br>
+            请确保已正确配置日志易OAuth2.0参数。复制 <code>.env.example</code> 为 <code>.env</code> 并填写实际值。
+        </div>
+
+        <div class="config-info">
+            <h3>当前配置</h3>
+            <div class="config-item">
+                <label>日志易地址:</label> {{ config.RIZHIYI_BASE_URL }}
+            </div>
+            <div class="config-item">
+                <label>客户端ID:</label> {{ config.CLIENT_ID }}
+            </div>
+            <div class="config-item">
+                <label>重定向URL:</label> {{ config.REDIRECT_URL }}
+            </div>
+        </div>
+
+        <h3>OAuth2.0 授权流程</h3>
+        <p>点击下面的按钮开始 OAuth2.0 授权流程：</p>
+        
+        <div>
+            <a href="{% url 'demo_flow' %}" class="btn">开始演示</a>
+            <a href="{{ authorize_url }}" class="btn btn-secondary" target="_blank">直接授权</a>
+        </div>
+
+        <div style="margin-top: 30px;">
+            <h4>授权URL示例：</h4>
+            <div class="code">{{ authorize_url }}</div>
+        </div>
+
+        {% if user_info %}
+        <div class="config-info" style="margin-top: 30px; border: 1px solid #e8e8e8; background: #fff;">
+            <h3 style="color: #1890ff; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-key"></i> API Key 配置
+            </h3>
+            <p style="color: #666; margin-bottom: 15px;">
+                后续 MCP Server 将使用此 API Key 调用日志易接口。
+            </p>
+            
+            <form action="{% url 'save_api_key' %}" method="post">
+                {% csrf_token %}
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">日志易 API Key:</label>
+                    <input type="password" name="api_key" value="{{ rizhiyi_api_key|default:'' }}" 
+                           placeholder="在此粘贴您的 API Key" 
+                           style="width: 100%; padding: 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-family: monospace;">
+                    <div style="margin-top: 8px; font-size: 12px; color: #8c8c8c;">
+                        <i class="fas fa-info-circle"></i> 如何获取：登录日志易 -> 个人中心 -> API Key -> 创建并复制
+                    </div>
+                </div>
+                <button type="submit" class="btn" style="margin: 0; background: #1890ff;">保存 API Key</button>
+            </form>
+            
+            {% if rizhiyi_api_key %}
+            <div style="margin-top: 15px; padding: 10px; background: #f6ffed; border: 1px solid #b7eb8f; border-radius: 4px; color: #52c41a;">
+                <i class="fas fa-check-circle"></i> 已保存 API Key
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div style="margin-top: 20px;">
+            <h4>使用说明：</h4>
+            <ol>
+                <li>确保已在日志易平台注册第三方应用</li>
+                <li>配置正确的客户端ID和密钥</li>
+                <li>设置匹配的重定向URI</li>
+                <li>点击"开始演示"体验完整流程</li>
+            </ol>
+        </div>
+    </div>
+{% endblock %}

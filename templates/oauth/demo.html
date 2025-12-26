@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}OAuth2.0 演示 - {{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+    <style>
+        .demo-container {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        .step {
+            margin: 30px 0;
+            padding: 20px;
+            border-left: 4px solid #007bff;
+            background: #f8f9fa;
+        }
+        .step h3 {
+            margin: 0 0 15px 0;
+            color: #007bff;
+        }
+        .step p {
+            margin: 10px 0;
+            color: #333;
+        }
+        .code {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 10px 0;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .flow-diagram {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .flow-step {
+            display: inline-block;
+            padding: 15px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border-radius: 25px;
+            position: relative;
+        }
+        .flow-arrow {
+            display: inline-block;
+            margin: 0 10px;
+            color: #007bff;
+            font-size: 20px;
+        }
+    </style>
+    
+    <div class="demo-container">
+        <h1>OAuth2.0 授权流程演示</h1>
+        
+        <div class="flow-diagram">
+            <div class="flow-step">1. 请求授权</div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">2. 用户登录</div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">3. 授权确认</div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">4. 获取令牌</div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">5. 获取用户信息</div>
+        </div>
+
+        <div class="step">
+            <h3>步骤1：请求授权</h3>
+            <p>点击下面的按钮跳转到日志易平台进行授权：</p>
+            <a href="{{ authorize_url }}" class="btn">前往日志易授权</a>
+            <div class="code">{{ authorize_url }}</div>
+            
+            <p><strong>参数说明：</strong></p>
+            <ul>
+                <li><code>response_type=code</code>：固定值，表示授权码模式</li>
+                <li><code>client_id</code>：在日志易平台申请的客户端ID</li>
+                <li><code>redirect_url</code>：必须与日志易平台配置一致</li>
+                <li><code>state</code>：防CSRF攻击的随机字符串</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>步骤2-3：用户登录和授权</h3>
+            <p>用户将在日志易平台完成以下操作：</p>
+            <ol>
+                <li>输入用户名和密码登录日志易平台</li>
+                <li>查看应用请求的权限范围</li>
+                <li>点击"授权"按钮确认授权</li>
+            </ol>
+            
+            <div class="warning">
+                <strong>注意：</strong>此步骤在日志易平台完成，当前演示应用无法直接控制。
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>步骤4：回调处理</h3>
+            <p>授权成功后，日志易平台将重定向到：</p>
+            <div class="code">{{ redirect_url }}?code=AUTHORIZATION_CODE&state=demo_state_123</div>
+            <p>当前演示应用将自动处理回调，交换访问令牌。</p>
+        </div>
+
+        <div class="step">
+            <h3>步骤5：获取用户信息</h3>
+            <p>使用获取到的访问令牌调用用户信息接口：</p>
+            <div class="code">
+GET {{ config.USERINFO_URL }}<br>
+Authorization: Bearer ACCESS_TOKEN
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 40px;">
+            <a href="{{ authorize_url }}" class="btn">开始授权流程</a>
+            <br>
+            <small>或访问：<a href="/">返回首页</a></small>
+        </div>
+    </div>
+{% endblock %}

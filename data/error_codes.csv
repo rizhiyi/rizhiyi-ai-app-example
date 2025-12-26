@@ -1,0 +1,8 @@
+error_id,code,status_text,message
+1,500,Internal Server Error,Generic error message for server-side failures. Check application logs for stack traces.
+2,404,Not Found,The requested resource could not be found. Check URL and routing configuration.
+3,403,Forbidden,Permission denied. Check user roles and resource permissions.
+16,502,Bad Gateway,Invalid response from upstream server. Check backend service status.
+17,503,Service Unavailable,Server is overloaded or down for maintenance. Try again later.
+18,401,Unauthorized,Authentication is required and has failed or has not yet been provided.
+19,429,Too Many Requests,User has sent too many requests in a given amount of time. Rate limiting applied.

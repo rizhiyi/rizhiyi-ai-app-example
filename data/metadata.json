@@ -1,0 +1,30 @@
+{
+    "assets.csv": {
+        "description": "Contains asset information, including IP addresses, server names, and ownership details.",
+        "columns": [
+            "asset_id",
+            "ip_address",
+            "name",
+            "owner",
+            "description"
+        ]
+    },
+    "error_codes.csv": {
+        "description": "Contains standard HTTP error codes and their meanings.",
+        "columns": [
+            "error_id",
+            "code",
+            "status_text",
+            "message"
+        ]
+    },
+    "troubleshooting_guide.csv": {
+        "description": "Provides steps and advice for common system issues like high CPU or memory leaks.",
+        "columns": [
+            "issue_id",
+            "issue_key",
+            "summary",
+            "solution"
+        ]
+    }
+}

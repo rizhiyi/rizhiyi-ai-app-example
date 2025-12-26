@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}错误 - {{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+    <style>
+        .error-container {
+            max-width: 500px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        .error-icon {
+            color: #dc3545;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            color: #333;
+            margin: 0 0 10px 0;
+        }
+        .header p {
+            color: #666;
+            margin: 0;
+        }
+        .error-details {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 4px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .error-details h3 {
+            margin: 0 0 15px 0;
+            color: #dc3545;
+        }
+        .error-details p {
+            margin: 5px 0;
+            color: #333;
+            word-break: break-all;
+        }
+        .code {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 10px 5px;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+    </style>
+    
+    <div class="error-container">
+        <div class="error-icon">✗</div>
+        <div class="header">
+            <h1>OAuth2.0 授权失败</h1>
+            <p>在授权过程中发生了错误</p>
+        </div>
+        
+        <div class="error-details">
+            <h3>错误详情</h3>
+            <p><strong>错误代码:</strong> {{ error|default:"unknown_error" }}</p>
+            
+            {% if error == "access_denied" %}
+                <p>用户拒绝了授权请求</p>
+            {% elif error == "invalid_client" %}
+                <p>客户端ID无效，请检查配置</p>
+            {% elif error == "invalid_redirect_url" %}
+                <p>重定向URL不匹配，请检查配置</p>
+            {% elif error == "unsupported_response_type" %}
+                <p>不支持的响应类型，请使用code</p>
+            {% elif error == "missing_authorization_code" %}
+                <p>缺少授权码，授权流程未完成</p>
+            {% elif error == "invalid_grant" %}
+                <p>授权码无效或已过期</p>
+            {% elif error == "token_exchange_failed" %}
+                <p>交换访问令牌失败</p>
+            {% else %}
+                <p>{{ error }}</p>
+            {% endif %}
+            
+            {% if details %}
+                <div style="margin-top: 15px;">
+                    <strong>详细信息:</strong>
+                    <div class="code" style="margin-top: 10px;">{{ details }}</div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div style="margin-top: 30px;">
+            <a href="{% url 'index' %}" class="btn">返回首页</a>
+            <a href="{% url 'demo_flow' %}" class="btn btn-secondary">重新尝试</a>
+        </div>
+    </div>
+{% endblock %}

@@ -1,0 +1,8 @@
+asset_id,ip_address,name,owner,description
+1,223.74.25.42,Client IP,Client Team,IP address of the client accessing the application.
+6,192.168.1.10,Payment Gateway,Finance Dept.,Core service for processing payments.
+7,192.168.1.11,User Service,Platform Team,Handles user authentication and profiles.
+8,192.168.1.20,MySQL Cluster,DBA Team,Main production database cluster.
+9,192.168.1.30,Redis Cache,Platform Team,Distributed cache for session management.
+10,192.168.1.40,Nginx LB,Network Team,Public facing load balancer.
+11,192.168.1.50,Email Service,Marketing IT,Service for sending transactional emails.

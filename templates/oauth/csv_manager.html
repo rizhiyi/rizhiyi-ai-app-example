@@ -1,0 +1,427 @@
+{% extends 'base.html' %}
+
+{% block title %}CSV 文件管理 - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="content-card">
+    <div class="card-header">
+        <div class="header-title">
+            <i class="fas fa-file-csv"></i>
+            CSV 文件管理
+        </div>
+        <div class="header-desc">
+            管理 AI 智能体可以查询的 CSV 知识库。上传的文件将自动提取元数据，帮助 AI 更准确地理解数据含义。
+        </div>
+    </div>
+
+    <div class="card-body">
+        <!-- 上传错误提示 -->
+        {% if upload_error %}
+        <div style="margin-bottom: 16px; padding: 12px 16px; background: #fff2f0; border: 1px solid #ffccc7; color: #ff4d4f; border-radius: 4px; display: flex; align-items: center; gap: 8px; font-size: 14px;">
+            <i class="fas fa-exclamation-circle"></i>
+            {{ upload_error }}
+        </div>
+        {% endif %}
+
+        <!-- 上传区域 -->
+        <div style="margin-bottom: 24px; padding: 20px; border: 1px dashed #d9d9d9; border-radius: 8px; background: #fafafa;">
+            <form method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 16px;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="upload">
+                
+                <div style="display: flex; align-items: flex-end; gap: 16px;">
+                    <div style="flex: 1.5;">
+                        <label for="csv_file" style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 14px;">选择 CSV 文件:</label>
+                        <input type="file" name="csv_file" id="csv_file" accept=".csv" required 
+                               style="width: 100%; padding: 5px; border: 1px solid #d9d9d9; border-radius: 4px; background: #fff; font-size: 13px;">
+                    </div>
+                    <div style="flex: 2;">
+                        <label for="description" style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 14px;">文件描述 (选填):</label>
+                        <input type="text" name="description" id="description" placeholder="留空将由 AI 自动生成描述"
+                               style="width: 100%; padding: 7px 10px; border: 1px solid #d9d9d9; border-radius: 4px; background: #fff; font-size: 13px;">
+                    </div>
+                    <div style="flex: 2;">
+                        <label for="columns" style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 14px;">列名 (选填):</label>
+                        <input type="text" name="columns" id="columns" placeholder="选择文件后将自动提取"
+                               style="width: 100%; padding: 7px 10px; border: 1px solid #d9d9d9; border-radius: 4px; background: #fff; font-size: 13px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="height: 35px; padding: 0 20px;" id="upload-btn">
+                        <i class="fas fa-upload"></i> 上传文件
+                    </button>
+                </div>
+
+                <!-- JS 预览区域 -->
+                <div id="js-preview-container" style="display: none; border-top: 1px solid #e8e8e8; padding-top: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <span style="font-size: 13px; font-weight: 500; color: #595959;">
+                            <i class="fas fa-eye"></i> 上传预览 (前 5 行)
+                        </span>
+                        <span style="font-size: 12px; color: #8c8c8c;">
+                            提示：您可以根据预览修改上方的“列名”字段
+                        </span>
+                    </div>
+                    <div style="overflow-x: auto; max-height: 200px; border: 1px solid #f0f0f0; border-radius: 4px;">
+                        <table id="js-preview-table" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                            <thead id="js-preview-thead" style="background: #fafafa; position: sticky; top: 0;">
+                                <!-- 动态生成 -->
+                            </thead>
+                            <tbody id="js-preview-tbody">
+                                <!-- 动态生成 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- 文件列表 -->
+        <div class="table-container">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: #fafafa; border-bottom: 1px solid #f0f0f0;">
+                        <th style="padding: 12px 16px; text-align: left; width: 180px; color: #595959; font-weight: 500;">文件名</th>
+                        <th style="padding: 12px 16px; text-align: left; width: 280px; color: #595959; font-weight: 500;">AI 知识库描述 (点击编辑)</th>
+                        <th style="padding: 12px 16px; text-align: left; color: #595959; font-weight: 500;">列信息 (点击编辑)</th>
+                        <th style="padding: 12px 16px; text-align: left; width: 90px; color: #595959; font-weight: 500;">大小</th>
+                        <th style="padding: 12px 16px; text-align: left; width: 160px; color: #595959; font-weight: 500;">最后修改时间</th>
+                        <th style="padding: 12px 16px; text-align: right; width: 100px; color: #595959; font-weight: 500;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for file in csv_files %}
+                    <tr style="border-bottom: 1px solid #f0f0f0;">
+                        <td style="padding: 12px;">
+                            <i class="far fa-file-csv" style="color: #52c41a; margin-right: 8px;"></i>
+                            {{ file.name }}
+                        </td>
+                        <td style="padding: 12px;">
+                            <div class="editable-cell" onclick="makeEditable(this, '{{ file.name }}', 'description')">
+                                <span class="display-text">{{ file.description|default:"点击添加描述..." }}</span>
+                                <textarea class="edit-input" style="display: none; width: 100%; border: 1px solid #1890ff; border-radius: 4px; padding: 4px; font-size: 13px; min-height: 40px;">{{ file.description }}</textarea>
+                            </div>
+                        </td>
+                        <td style="padding: 12px;">
+                            <div class="editable-cell" onclick="makeEditable(this, '{{ file.name }}', 'columns')">
+                                <span class="display-text">{{ file.columns|default:"点击添加列名..." }}</span>
+                                <textarea class="edit-input" style="display: none; width: 100%; border: 1px solid #1890ff; border-radius: 4px; padding: 4px; font-size: 13px; min-height: 40px;">{{ file.columns }}</textarea>
+                            </div>
+                        </td>
+                        <td style="padding: 12px;">{{ file.size }}</td>
+                        <td style="padding: 12px;">{{ file.modified|date:"Y-m-d H:i:s"|default:"未知" }}</td>
+                        <td style="padding: 12px; text-align: right;">
+                            <a href="?preview={{ file.name }}" class="btn-text" style="margin-right: 12px; color: #1890ff; text-decoration: none;" title="预览">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <form method="post" style="display: inline;" onsubmit="return confirm('确定要删除此文件吗？');">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="filename" value="{{ file.name }}">
+                                <button type="submit" style="background: none; border: none; color: #ff4d4f; cursor: pointer; padding: 4px 8px;" title="删除">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" style="padding: 24px; text-align: center; color: #999;">
+                            暂无 CSV 文件
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 预览区域 -->
+        {% if preview_data %}
+        <div id="preview-section" style="margin-top: 32px; border-top: 1px solid #f0f0f0; padding-top: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="font-size: 16px; font-weight: 500;">
+                    <i class="fas fa-search"></i> 文件预览: {{ preview_data.filename }}
+                </h3>
+                <a href="?" style="color: #8c8c8c; text-decoration: none; font-size: 14px;">
+                    <i class="fas fa-times"></i> 关闭预览
+                </a>
+            </div>
+
+            {% if preview_data.error %}
+                <div style="padding: 16px; background: #fff2f0; border: 1px solid #ffccc7; color: #ff4d4f; border-radius: 4px;">
+                    预览失败: {{ preview_data.error }}
+                </div>
+            {% else %}
+                <div class="table-container" style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #fafafa; border-bottom: 1px solid #f0f0f0;">
+                                {% for col in preview_data.columns %}
+                                <th style="padding: 10px; text-align: left; font-size: 12px; white-space: nowrap;">{{ col }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in preview_data.rows %}
+                            <tr style="border-bottom: 1px solid #f0f0f0;">
+                                {% for cell in row %}
+                                <td style="padding: 10px; font-size: 12px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    {{ cell }}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div style="margin-top: 8px; font-size: 12px; color: #8c8c8c;">
+                    注：仅展示前 10 条数据
+                </div>
+            {% endif %}
+        </div>
+        <script>
+            // 自动滚动到预览区域
+            document.getElementById('preview-section').scrollIntoView({ behavior: 'smooth' });
+        </script>
+        {% endif %}
+
+        <script>
+            // 处理 CSV 预览逻辑
+            document.getElementById('csv_file').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) {
+                    document.getElementById('js-preview-container').style.display = 'none';
+                    document.getElementById('columns').value = '';
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const text = event.target.result;
+                    const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                    if (lines.length === 0) return;
+
+                    // 简单解析 CSV (处理逗号分隔，不考虑复杂引号转义)
+                    const rows = lines.slice(0, 6).map(line => {
+                        // 简单的 CSV 分隔逻辑，处理基本的引号
+                        const result = [];
+                        let current = '';
+                        let inQuotes = false;
+                        for (let i = 0; i < line.length; i++) {
+                            const char = line[i];
+                            if (char === '"') {
+                                inQuotes = !inQuotes;
+                            } else if (char === ',' && !inQuotes) {
+                                result.push(current.trim());
+                                current = '';
+                            } else {
+                                current += char;
+                            }
+                        }
+                        result.push(current.trim());
+                        return result;
+                    });
+
+                    const header = rows[0];
+                    const dataRows = rows.slice(1);
+
+                    // 更新列名输入框
+                    document.getElementById('columns').value = header.join(', ');
+
+                    // 生成预览表格
+                    const container = document.getElementById('js-preview-container');
+                    const thead = document.getElementById('js-preview-thead');
+                    const tbody = document.getElementById('js-preview-tbody');
+
+                    container.style.display = 'block';
+                    
+                    // 生成表头
+                    thead.innerHTML = '<tr>' + header.map(h => 
+                        `<th style="padding: 8px 12px; text-align: left; border-bottom: 1px solid #f0f0f0; white-space: nowrap; color: #595959;">${h}</th>`
+                    ).join('') + '</tr>';
+
+                    // 生成数据行
+                    tbody.innerHTML = dataRows.map(row => 
+                        `<tr style="border-bottom: 1px solid #f0f0f0;">${row.map(cell => 
+                            `<td style="padding: 8px 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cell}</td>`
+                        ).join('')}</tr>`
+                    ).join('');
+                };
+                reader.readAsText(file);
+            });
+
+            // 处理上传按钮状态
+            document.querySelector('form[enctype="multipart/form-data"]').addEventListener('submit', function(e) {
+                const btn = document.getElementById('upload-btn');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 上传并分析中...';
+            });
+
+            function makeEditable(container, filename, field) {
+                const displayText = container.querySelector('.display-text');
+                const editInput = container.querySelector('.edit-input');
+                
+                if (editInput.style.display === 'block') return;
+
+                displayText.style.display = 'none';
+                editInput.style.display = 'block';
+                editInput.focus();
+                
+                // 设置光标到末尾
+                const val = editInput.value;
+                editInput.value = '';
+                editInput.value = val;
+
+                const save = () => {
+                    const newValue = editInput.value.trim();
+                    const originalValue = (editInput.getAttribute('data-original') || '').trim();
+                    
+                    if (newValue !== originalValue) {
+                        saveField(filename, field, newValue, container);
+                    } else {
+                        cancel();
+                    }
+                };
+
+                const cancel = () => {
+                    editInput.style.display = 'none';
+                    displayText.style.display = 'block';
+                    editInput.removeEventListener('blur', save);
+                    editInput.removeEventListener('keydown', keyHandler);
+                };
+
+                const keyHandler = (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        editInput.blur();
+                    } else if (e.key === 'Escape') {
+                        editInput.value = editInput.getAttribute('data-original') || '';
+                        cancel();
+                    }
+                };
+
+                // 初始化原始值
+                if (!editInput.getAttribute('data-original')) {
+                    editInput.setAttribute('data-original', editInput.value);
+                }
+
+                editInput.addEventListener('blur', save);
+                editInput.addEventListener('keydown', keyHandler);
+            }
+
+            function saveField(filename, field, value, container) {
+                const displayText = container.querySelector('.display-text');
+                const editInput = container.querySelector('.edit-input');
+                
+                const formData = new FormData();
+                formData.append('action', 'update_metadata');
+                formData.append('filename', filename);
+                formData.append(field, value);
+                formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+                
+                displayText.innerText = '保存中...';
+                displayText.style.display = 'block';
+                displayText.style.color = '#8c8c8c';
+                editInput.style.display = 'none';
+
+                fetch('', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        displayText.innerText = value || (field === 'description' ? '点击添加描述...' : '点击添加列名...');
+                        displayText.style.color = '#52c41a';
+                        editInput.setAttribute('data-original', value); // 更新原始值
+                        setTimeout(() => {
+                            displayText.style.color = '';
+                        }, 2000);
+                    } else {
+                        alert('保存失败: ' + (data.message || '未知错误'));
+                        displayText.innerText = editInput.value || (field === 'description' ? '点击添加描述...' : '点击添加列名...');
+                        displayText.style.color = '';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('保存时发生错误');
+                    displayText.innerText = editInput.value || (field === 'description' ? '点击添加描述...' : '点击添加列名...');
+                    displayText.style.color = '';
+                });
+            }
+        </script>
+    </div>
+</div>
+
+<style>
+    .editable-cell {
+        cursor: pointer;
+        min-height: 24px;
+        padding: 4px;
+        border-radius: 4px;
+        transition: background 0.3s;
+    }
+    .editable-cell:hover {
+        background: #f5f5f5;
+    }
+    .display-text {
+        display: block;
+        word-break: break-all;
+        font-size: 13px;
+    }
+    .edit-input {
+        resize: vertical;
+        font-family: inherit;
+    }
+    .content-card {
+        background: #fff;
+        border-radius: 4px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+        margin-bottom: 24px;
+    }
+    .card-header {
+        padding: 16px 24px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .header-title {
+        font-size: 16px;
+        font-weight: 500;
+        color: #1f1f1f;
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .header-desc {
+        font-size: 14px;
+        color: #8c8c8c;
+    }
+    .card-body {
+        padding: 24px;
+    }
+    .btn {
+        padding: 5px 16px;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+        border: 1px solid #d9d9d9;
+        background: #fff;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.3s;
+    }
+    .btn-primary {
+        background: #1890ff;
+        border-color: #1890ff;
+        color: #fff;
+    }
+    .btn-primary:hover {
+        background: #40a9ff;
+        border-color: #40a9ff;
+    }
+    .table-container {
+        border: 1px solid #f0f0f0;
+        border-radius: 4px;
+    }
+</style>
+{% endblock %}
